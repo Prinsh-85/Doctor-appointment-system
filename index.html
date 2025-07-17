@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Doctor Appointment Booking</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-800">
+  <div class="max-w-6xl mx-auto p-6 space-y-10">
+    <!-- Header -->
+    <header class="text-center">
+      <h1 class="text-4xl font-bold text-blue-600">Doctor Appointment System</h1>
+      <p class="text-sm text-gray-500">Book appointments and view history easily.</p>
+    </header>
+
+    <!-- Doctor List -->
+    <section>
+      <h2 class="text-2xl font-semibold mb-4">Available Doctors</h2>
+      <div id="doctorList" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
+    </section>
+
+    <!-- Appointment Form -->
+    <section class="bg-white p-6 rounded shadow">
+      <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+        <span>🗓️</span> Book an Appointment
+      </h2>
+      <form id="appointmentForm" class="space-y-4">
+        <input type="text" id="patientName" class="w-full p-2 border rounded" placeholder="Your Name" required />
+        <input type="email" id="patientEmail" class="w-full p-2 border rounded" placeholder="Your Email" required />
+        <input type="date" id="appointmentDate" class="w-full p-2 border rounded" required />
+        <select id="doctorSelect" class="w-full p-2 border rounded" required></select>
+        <select id="slotSelect" class="w-full p-2 border rounded" required></select>
+        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+          Book Appointment
+        </button>
+        <p id="message" class="text-sm"></p>
+      </form>
+    </section>
+
+    <!-- Appointment History -->
+    <section>
+      <h2 class="text-xl font-semibold mb-2">📜 Appointment History</h2>
+      <div id="appointmentHistory" class="space-y-2"></div>
+    </section>
+  </div>
+
+  <script>
+    const doctorListDiv = document.getElementById("doctorList");
+    const doctorSelect = document.getElementById("doctorSelect");
+    const slotSelect = document.getElementById("slotSelect");
+    const form = document.getElementById("appointmentForm");
+    const message = document.getElementById("message");
+    const historyDiv = document.getElementById("appointmentHistory");
+
+    let doctors = [];
+
+    async function loadDoctors() {
+      try {
+        const res = await fetch("http://localhost:5000/api/doctors");
+        doctors = await res.json();
+
+        doctorListDiv.innerHTML = doctors
+          .map(doc => `
+            <div class="bg-white p-4 rounded shadow">
+              <h3 class="text-lg font-bold">${doc.name}</h3>
+              <p>${doc.specialization}</p>
+              <p>Experience: ${doc.experience} years</p>
+              <p>📞 ${doc.phone}</p>
+              <p class="text-sm text-gray-500">Slots: ${doc.availableSlots.join(", ")}</p>
+            </div>
+          `).join("");
+         
+        doctorSelect.innerHTML = '<option value="">Select Doctor</option>' +
+          doctors.map((doc, index) =>
+            `<option value="${index}">${doc.name} (${doc.specialization})</option>`
+          ).join("");
+      } catch (err) {
+        doctorListDiv.innerHTML = "<p class='text-red-600'>Failed to load doctors.</p>";
+      }
+    }
+
+    doctorSelect.addEventListener("change", (e) => {
+      const index = e.target.value;
+      if (index !== "") {
+        const slots = doctors[index].availableSlots || [];
+        slotSelect.innerHTML = slots.map(s => `<option value="${s}">${s}</option>`).join("");
+      } else {
+        slotSelect.innerHTML = "";
+      }
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      message.textContent = "";
+
+      const name = document.getElementById("patientName").value;
+      const email = document.getElementById("patientEmail").value;
+      const date = document.getElementById("appointmentDate").value;
+      const doctorIndex = doctorSelect.value;
+      const slot = slotSelect.value;
+
+      if (!name || !email || !date || !slot || doctorIndex === "") {
+        message.textContent = "Please fill in all fields.";
+        message.className = "text-red-600";
+        return;
+      }
+
+      try {
+        const doctorId = doctors[doctorIndex]._id;
+        const res = await fetch("http://localhost:5000/api/appointments/book", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ patientName: name, patientEmail: email, date, doctorId, slot })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.msg || "Booking failed");
+
+        message.textContent = "Appointment booked successfully!";
+        message.className = "text-green-600";
+        form.reset();
+        slotSelect.innerHTML = "";
+        loadHistory(); 
+      } catch (err) {
+        message.textContent = err.message;
+        message.className = "text-red-600";
+      }
+    });
+
+    async function loadHistory() {
+
+    
+   try {
+    const res = await fetch("http://localhost:5000/api/appointments");
+    const appointments = await res.json();
+
+    historyDiv.innerHTML = appointments.map(a => `
+      <div class="bg-white p-3 rounded shadow">
+        <p><strong>${a.patientName}</strong> booked <strong>${a.slot}</strong> with <strong>${a.doctorId?.name}</strong> on <strong>${a.date}</strong></p>
+      </div>
+    `).join("");
+  } catch (err) {
+    historyDiv.innerHTML = "<p class='text-red-600'>Failed to load appointment history.</p>";
+  }
+}
+
+    loadDoctors();
+    loadHistory();
+  </script>
+</body>
+</html>
